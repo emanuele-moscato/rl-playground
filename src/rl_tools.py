@@ -33,7 +33,9 @@ class RandomModel(object):
     Random model. Returns an array of 10 elements, each of which contains the
     "value" between 0 and 1 of the corresponding action. The entries are
     normalised as if they were probabilities, even though this is probably not
-    needed.
+    needed. Every agent is equipped with a RandomModel and and epsilon-greedy
+    strategy dictates whether to use it or the "learning" model to perform a
+    particular action.
     """
     def __init__(self):
         pass
@@ -78,8 +80,7 @@ class Agent(object):
             else:
                 return np.argmax(self.compute_q(np.array(state).reshape(1,1)))+1
 
-    def train(self, batch_size=100):
-        #CAVEAT: see comment inside the Game.play_one_step() method.
+    def train(self, batch_size=10):
         if not self.random_only:
             if len(self.memory)<batch_size:
                 training_batch = np.array(self.memory)
@@ -101,22 +102,18 @@ class Game(object):
     """
     Game engine.
     """
-    def __init__(self, n_attempts=10):
+    def __init__(self, n_actions=10):
         self.reward = 0
-        self.n_actions = 0
-        self.n_attempts = n_attempts
+        self.n_actions = n_actions
+        self.action_count = 0
 
-    def play_one_step(self, agent, env, eps):
+    def play_one_action(self, agent, env, eps):
         current_state = env.return_state()
         action = agent.choose_action(current_state, eps)
         reward = env.return_reward(action)
         env.update_state(action)
         next_state = env.state
         
-        #NOTE: currently we are storing ALL of the transitions in the agent's
-        #memory. This must be a mistake, as the agent will be trained also on
-        #old transitions, in doing which old values for the parameters of the
-        #model were used.
         transition = (
             current_state,
             action,
@@ -126,13 +123,13 @@ class Game(object):
         agent.memory.append(transition)
 
         self.reward += reward
-        self.n_actions += 1
+        self.action_count += 1
 
         return transition
 
     def play_one_episode(self, agent, env, eps):
         self.reward = 0
-        for _ in range(self.n_attempts):
-            self.play_one_step(agent, env, eps)
+        for _ in range(self.n_actions):
+            self.play_one_action(agent, env, eps)
         agent.train()
         return self.reward
