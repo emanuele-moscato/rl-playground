@@ -2,6 +2,7 @@ import numpy as np
 from keras.models import Sequential
 from keras.layers import Dense
 import random
+from collections import deque
 
 class Environment(object):
     """
@@ -61,7 +62,7 @@ class Agent(object):
         self.random_only = random_only
         if not random_only:
             self.model = model
-        self.memory = []
+        self.memory = deque(maxlen=500)
         self.gamma = gamma
 
     def compute_q(self, state):
@@ -75,11 +76,26 @@ class Agent(object):
             if self.random_only:
                 return np.argmax(self.random_model.predict())+1
             else:
-                return np.argmax(self.compute_q(state))+1
+                return np.argmax(self.compute_q(np.array(state).reshape(1,1)))+1
 
-    def train(self):
-        random.sample(agent.memory, int(len(agent.memory)/10))
-        # Continue from here!
+    def train(self, batch_size=100):
+        #CAVEAT: see comment inside the Game.play_one_step() method.
+        if not self.random_only:
+            if len(self.memory)<batch_size:
+                training_batch = np.array(self.memory)
+            else:
+                training_batch = np.array(
+                    random.sample(self.memory, batch_size)
+                )
+            Y_target = (training_batch[:,2]
+                + self.gamma
+                * np.amax(self.compute_q(training_batch[:,3]), axis=1))
+            Y_pred = np.take(
+                self.compute_q(training_batch[:,0]),
+                training_batch[:,1]-1
+            )
+            self.model.fit(Y_target, Y_pred, epochs=1, verbose=0)
+        
 
 class Game(object):
     """
@@ -97,6 +113,10 @@ class Game(object):
         env.update_state(action)
         next_state = env.state
         
+        #NOTE: currently we are storing ALL of the transitions in the agent's
+        #memory. This must be a mistake, as the agent will be trained also on
+        #old transitions, in doing which old values for the parameters of the
+        #model were used.
         transition = (
             current_state,
             action,
@@ -104,17 +124,15 @@ class Game(object):
             next_state
         )
         agent.memory.append(transition)
-        
-        agent.train()
 
         self.reward += reward
         self.n_actions += 1
 
         return transition
 
-    def play_one_round(self, agent, env, eps):
+    def play_one_episode(self, agent, env, eps):
         self.reward = 0
-        
         for _ in range(self.n_attempts):
             self.play_one_step(agent, env, eps)
+        agent.train()
         return self.reward
