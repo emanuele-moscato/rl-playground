@@ -1,6 +1,7 @@
 import numpy as np
 from keras.models import Sequential
 from keras.layers import Dense
+from keras.losses import mean_squared_error
 import random
 from collections import deque
 
@@ -64,23 +65,30 @@ class Agent(object):
         self.random_only = random_only
         if not random_only:
             self.model = model
-        self.memory = deque(maxlen=500)
+        self.memory = deque(maxlen=250)# Previously 500
+        self.total_memory = []
         self.gamma = gamma
+        self.eps = 1.0
+        self.model_memory = []
+        self.eps_memory = []
 
     def compute_q(self, state):
         return self.model.predict(state)
 
-    def choose_action(self, state, eps):
+    def choose_action(self, state):
         greedychoice = np.random.uniform(0.0,1.0)
-        if greedychoice<eps:
+        if greedychoice<self.eps:
+            self.model_memory.append(0)
             return np.argmax(self.random_model.predict())+1
         else:
             if self.random_only:
+                self.model_memory.append(0)
                 return np.argmax(self.random_model.predict())+1
             else:
+                self.model_memory.append(1)
                 return np.argmax(self.compute_q(np.array(state).reshape(1,1)))+1
 
-    def train(self, batch_size=10):
+    def train(self, batch_size=250):# Previously 500
         if not self.random_only:
             if len(self.memory)<batch_size:
                 training_batch = np.array(self.memory)
@@ -106,12 +114,13 @@ class Game(object):
         self.reward = 0
         self.n_actions = n_actions
         self.action_count = 0
+        self.episode_count = 0
 
-    def play_one_action(self, agent, env, eps):
+    def play_one_action(self, agent, env):
         current_state = env.return_state()
-        action = agent.choose_action(current_state, eps)
+        action = agent.choose_action(current_state)
         reward = env.return_reward(action)
-        env.update_state(action)
+        # env.update_state(action)
         next_state = env.state
         
         transition = (
@@ -121,15 +130,25 @@ class Game(object):
             next_state
         )
         agent.memory.append(transition)
+        agent.total_memory.append(transition)
 
         self.reward += reward
         self.action_count += 1
 
         return transition
 
-    def play_one_episode(self, agent, env, eps):
+    def play_one_episode(self, agent, env):
         self.reward = 0
         for _ in range(self.n_actions):
-            self.play_one_action(agent, env, eps)
-        agent.train()
+            agent.eps_memory.append(agent.eps)
+            self.play_one_action(agent, env)
+        self.episode_count += 1
+        if self.episode_count>100:
+            if agent.eps>0.01:
+                agent.eps *= 0.95
+        if (self.action_count+1)%125==0:
+            agent.train()
         return self.reward
+        
+def custom_loss(Y_target, Y_pred):
+    return mean_squared_error(Y_target, Y_pred)
