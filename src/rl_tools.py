@@ -65,7 +65,7 @@ class Agent(object):
     - Compute Q-value funcion taking current state and an action as an input
     - Update the parameters of the model (learn), if any
     """
-    def __init__(self, gamma, model, memory_size, 
+    def __init__(self, gamma, model, memory_size,
         batch_size, epochs, random_only=True):
         self.random_model = RandomModel()
         self.random_only = random_only
@@ -105,6 +105,17 @@ class Agent(object):
                 training_batch = np.array(
                     random.sample(self.memory, self.batch_size)
                 )
+            '''
+            #Oversample the positive transitions
+            oversampling_factor = 3
+            for _ in range(oversampling_factor):
+                training_batch = np.concatenate(
+                    (training_batch, training_batch[training_batch[:,2]==1]),
+                    axis=0
+                )
+            '''
+
+            # Use with custom loss
             Y_target = (training_batch[:,2]
                 + self.gamma
                 * np.amax(self.compute_q(training_batch[:,3]), axis=1))
@@ -113,7 +124,6 @@ class Agent(object):
                 training_batch[:,1]-1
             )
             self.model.fit(Y_target, Y_pred, epochs=self.epochs, verbose=0)
-        
 
 class Game(object):
     """
@@ -153,7 +163,7 @@ class Game(object):
             self.play_one_action(agent, env)
         self.episode_count += 1
         if self.episode_count>100:
-            if agent.eps>0.05:# Previously 0.01
+            if agent.eps>0.1:# Previously 0.01
                 agent.eps *= 0.95
         if training:
             if (self.action_count+1)%1==0:#Previously 125
