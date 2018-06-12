@@ -82,7 +82,7 @@ class Agent(object):
         self.training_memory = []
 
     def compute_q(self, state):
-        return self.model.predict(state)
+        return self.model.predict(np.array(state).reshape(-1,1))
 
     def choose_action(self, state):
         greedychoice = np.random.uniform(0.0,1.0)
@@ -114,7 +114,8 @@ class Agent(object):
                     axis=0
                 )
             '''
-
+            
+            '''
             # Use with custom loss
             Y_target = (training_batch[:,2]
                 + self.gamma
@@ -124,14 +125,40 @@ class Agent(object):
                 training_batch[:,1]-1
             )
             self.model.fit(Y_target, Y_pred, epochs=self.epochs, verbose=0)
+            '''
+            for i in range(training_batch.shape[0]):
+                Y_target = self.compute_q(training_batch[i,0])
+                Y_target[0,training_batch[i,1]-1] = (
+                    training_batch[i,2]
+                    + self.gamma
+                    * np.amax(
+                        self.compute_q(training_batch[i,3]),
+                        axis=1
+                    )
+                )
+                self.model.fit(
+                    np.array(training_batch[i,0]).reshape(-1,1),
+                    Y_target,
+                    epochs=self.epochs,
+                    verbose=0
+                )
 
 class Game(object):
     """
     Game engine.
     """
-    def __init__(self, n_actions=500):
+    def __init__(
+        self,
+        n_actions=500,
+        eps_min=0.1,
+        inv_train_freq=1,
+        n_random_episodes=100
+    ):
         self.reward = 0
         self.n_actions = n_actions
+        self.eps_min = eps_min
+        self.inv_train_freq = inv_train_freq
+        self.n_random_episodes = n_random_episodes
         self.action_count = 0
         self.episode_count = 0
 
@@ -162,11 +189,11 @@ class Game(object):
             agent.eps_memory.append(agent.eps)
             self.play_one_action(agent, env)
         self.episode_count += 1
-        if self.episode_count>100:
-            if agent.eps>0.1:# Previously 0.01
+        if self.episode_count>self.n_random_episodes:
+            if agent.eps>self.eps_min:
                 agent.eps *= 0.95
         if training:
-            if (self.action_count+1)%1==0:#Previously 125
+            if (self.action_count+1)%self.inv_train_freq==0:
                 agent.train()
                 agent.training_memory.append(1)
             else:
@@ -200,7 +227,12 @@ def run_game(agent_params, game_params):
         agent_params['epochs'],
         random_only=False
     )
-    game = Game(game_params['n_actions'])
+    game = Game(
+        game_params['n_actions'],
+        game_params['eps_min'],
+        game_params['inverse_training_freq'],
+        int(game_params['n_episodes']*0.3)
+    )
 
     n_episodes = game_params['n_episodes']
     scores = []
