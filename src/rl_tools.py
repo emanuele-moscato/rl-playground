@@ -5,7 +5,7 @@ from keras.losses import mean_squared_error
 import random
 from collections import deque
 import plotly.graph_objs as go
-from plotly.offline import iplot
+from plotly.offline import iplot, plot
 from plotly import tools
 from tqdm import tqdm_notebook as tqdm
 import pickle
@@ -166,7 +166,7 @@ class Game(object):
         current_state = env.return_state()
         action = agent.choose_action(current_state)
         reward = env.return_reward(action)
-        # env.update_state(action)
+        env.update_state(action) # Previously commented out
         next_state = env.state
         
         transition = (
@@ -207,12 +207,28 @@ def run_game(agent_params, game_params):
     etc.) specified in the arguments.
     """
     model = Sequential()
+    '''
     model.add(Dense(
         agent_params['nodes'],
         input_shape=(1,),
         activation=agent_params['activation']
     ))
     model.add(Dense(10))
+    '''
+    layer_counter = 1
+    for layer in agent_params['layers']:
+        if layer_counter==1:
+            model.add(Dense(
+                layer['nodes'],
+                input_shape=(1,),
+                activation=layer['activation']
+            ))
+        else:
+            model.add(Dense(
+                layer['nodes'],
+                activation=layer['activation']
+            ))
+        layer_counter += 1
     model.compile(
         optimizer=agent_params['optimizer'],
         loss=custom_loss
@@ -250,7 +266,7 @@ def run_game(agent_params, game_params):
 def custom_loss(Y_target, Y_pred):
     return mean_squared_error(Y_target, Y_pred)
 
-def plot_scores(scores):
+def plot_scores(scores, download=False):
     """
     Plots the collection of scores across episodes.
     """
@@ -274,7 +290,10 @@ def plot_scores(scores):
     
     fig = go.Figure(data=data, layout=layout)
     
-    iplot(fig)
+    if download:
+        iplot(fig, image='png')
+    else:
+        iplot(fig)
 
 def describe_scores(scores):
     """
